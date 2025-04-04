@@ -2,7 +2,7 @@ const { mergeDocxFolders } = require("./constants/services/docx-service");
 
 (async () => {
     try {
-        const files = ["1.docx", "2.docx", "3.docx"];
+        const files = ["um.docx", "dois.docx", "tres.docx"];
         
         const outputFile = "merged.docx";
 
