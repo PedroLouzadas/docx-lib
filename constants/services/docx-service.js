@@ -30,7 +30,6 @@ const unzipDocx = async (docxPath, outputDir) => {
   }
 };
 
-// Main merging function
 const mergeDocxFolders = async (files, outputFilePath) => {
   if (!Array.isArray(files) || files.length === 0) {
     throw new Error(DOCX.ERROR_INVALID_FOLDER_LIST);
@@ -51,19 +50,15 @@ const mergeDocxFolders = async (files, outputFilePath) => {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
   }
 
-  // Track image ID mappings for each document
   const mediaIdMappings = {};
   let nextImageId = 1;
 
-  // Copy the content of the first document as base
   copyFolderRecursiveSync(tempFolders[0], TEMP_DIR);
   
-  // Then merge each additional document
   for (let i = 1; i < tempFolders.length; i++) {
     mediaIdMappings[i] = {};
     await mergeDocxContent(tempFolders[i], TEMP_DIR, mediaIdMappings[i], nextImageId);
     
-    // Update the next available image ID
     const sourceMediaFolder = path.join(tempFolders[i], DOCX.MEDIA_FOLDER);
     if (fs.existsSync(sourceMediaFolder)) {
       const mediaFiles = fs.readdirSync(sourceMediaFolder);
@@ -122,14 +117,11 @@ const mergeMedia = (sourceFolder, targetFolder, mediaMapping, startImageId) => {
   fs.readdirSync(sourceMedia).forEach((file) => {
     const srcFile = path.join(sourceMedia, file);
     
-    // Extract file extension
     const fileExt = path.extname(file);
     const oldFileName = path.basename(file);
-    // Use a more reliable naming pattern with a timestamp to ensure uniqueness
     const newFileName = `image${currentImageId}_${Date.now()}${fileExt}`;
     const destFile = path.join(targetMedia, newFileName);
     
-    // Store old to new filename mapping
     mediaMapping[oldFileName] = newFileName;
     
     fs.copyFileSync(srcFile, destFile);
@@ -156,22 +148,17 @@ const updateRelationships = (sourceFolder, targetFolder, mediaMapping) => {
       DOCX.ENCODING);
   }
 
-  // Read relationship files
   let sourceRels = fs.readFileSync(sourceDocRelsPath, DOCX.ENCODING);
   let targetRels = fs.readFileSync(targetDocRelsPath, DOCX.ENCODING);
   
-  // Find the highest existing rId in the target file to avoid conflicts
   const existingRIds = [...targetRels.matchAll(/Id="(rId\d+)"/g)].map(m => parseInt(m[1].replace('rId', '')));
   let maxRId = existingRIds.length > 0 ? Math.max(...existingRIds) : 0;
 
-  // Extract all source relationships
   const sourceRelMatches = [...sourceRels.matchAll(/<Relationship [^>]*>/g)];
   
-  // For each relationship in the source
   sourceRelMatches.forEach((match) => {
     const rel = match[0];
     
-    // Check if it's an image relationship
     if (rel.includes('media/')) {
       const idMatch = rel.match(/Id="([^"]+)"/);
       const targetMatch = rel.match(/Target="([^"]+)"/);
@@ -181,22 +168,17 @@ const updateRelationships = (sourceFolder, targetFolder, mediaMapping) => {
         const oldTarget = targetMatch[1];
         const oldFileName = path.basename(oldTarget);
         
-        // If we have a mapping for this media file
         if (mediaMapping[oldFileName]) {
-          // Create unique ID for the relationship
           maxRId++;
           const newId = `rId${maxRId}`;
           const newTarget = oldTarget.replace(oldFileName, mediaMapping[oldFileName]);
-          
-          // Create new relationship with updated IDs
+
           const newRel = rel
             .replace(/Id="([^"]+)"/, `Id="${newId}"`)
             .replace(/Target="([^"]+)"/, `Target="${newTarget}"`);
           
-          // Store the old-to-new ID mapping for document.xml updates
           mediaMapping[oldId] = newId;
           
-          // Add the new relationship to the target file
           targetRels = targetRels.replace(
             /<\/Relationships>/,
             `${newRel}\n</Relationships>`
@@ -204,7 +186,6 @@ const updateRelationships = (sourceFolder, targetFolder, mediaMapping) => {
         }
       }
     } else {
-      // For non-media relationships, add them if they don't exist
       if (!targetRels.includes(rel)) {
         targetRels = targetRels.replace(
           /<\/Relationships>/,
@@ -216,7 +197,6 @@ const updateRelationships = (sourceFolder, targetFolder, mediaMapping) => {
 
   fs.writeFileSync(targetDocRelsPath, targetRels, DOCX.ENCODING);
   
-  // Also update the main relationships file
   const mainRelsPath = "_rels/.rels";
   const sourceRelsPath = path.join(sourceFolder, mainRelsPath);
   const targetRelsPath = path.join(targetFolder, mainRelsPath);
@@ -225,7 +205,6 @@ const updateRelationships = (sourceFolder, targetFolder, mediaMapping) => {
     let sourceMainRels = fs.readFileSync(sourceRelsPath, DOCX.ENCODING);
     let targetMainRels = fs.readFileSync(targetRelsPath, DOCX.ENCODING);
 
-    // Generic regex for relationship tags
     const relationshipRegex = /<Relationship [^>]*>/g;
     const relationships = sourceMainRels.match(relationshipRegex) || [];
     
@@ -243,7 +222,6 @@ const updateRelationships = (sourceFolder, targetFolder, mediaMapping) => {
 };
 
 const mergeStylesAndSettings = (sourceFolder, targetFolder) => {
-  // Lista de arquivos de estilo comuns em documentos DOCX
   const styleFiles = [
     "word/styles.xml",
     "word/numbering.xml",
@@ -258,28 +236,21 @@ const mergeStylesAndSettings = (sourceFolder, targetFolder) => {
     const targetPath = path.join(targetFolder, file);
 
     if (fs.existsSync(sourcePath)) {
-      // Garanta que o diretório de destino exista
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
       
       if (!fs.existsSync(targetPath)) {
         fs.copyFileSync(sourcePath, targetPath);
-      } else {
-        // Para arquivos de estilo, poderíamos mesclar os estilos, mas por simplicidade,
-        // manteremos os estilos do documento base
       }
     }
   });
 };
 
-// Função para atualizar as referências de imagem no XML do documento
 const updateDocumentXmlImageRefs = (xmlContent, mediaMapping) => {
   let updatedXml = xmlContent;
   
-  // Replace all references to image relationships - cover all possible patterns
   for (const oldRelId in mediaMapping) {
     const newRelId = mediaMapping[oldRelId];
     
-    // Match different patterns of relationship references
     const patterns = [
       new RegExp(`r:id="${oldRelId}"`, 'g'),
       new RegExp(`r:id='${oldRelId}'`, 'g'),
@@ -291,7 +262,6 @@ const updateDocumentXmlImageRefs = (xmlContent, mediaMapping) => {
       new RegExp(`relationships:id='${oldRelId}'`, 'g')
     ];
     
-    // Apply all patterns
     patterns.forEach(pattern => {
       updatedXml = updatedXml.replace(pattern, (match) => {
         return match.replace(oldRelId, newRelId);
@@ -310,28 +280,20 @@ const mergeDocxContent = async (sourceFolder, targetFolder, mediaMapping, startI
     const content1 = fs.readFileSync(docXmlPath1, DOCX.ENCODING);
     const content2 = fs.readFileSync(docXmlPath2, DOCX.ENCODING);
 
-    // Process media and get mappings
     mergeMedia(sourceFolder, targetFolder, mediaMapping, startImageId);
     
-    // Update relationships based on new media filenames
     updateRelationships(sourceFolder, targetFolder, mediaMapping);
     
-    // Update image references in document content
     const updatedContent2 = updateDocumentXmlImageRefs(content2, mediaMapping);
     
-    // Properly merge document body content
-    // We need to extract document content but preserve sectPr elements
     const extractBody = (content) => {
-      // Extract the body content excluding any sectPr element at the end
       const bodyMatch = content.match(/<w:body>([\s\S]*?)<\/w:body>/);
       if (!bodyMatch) return { body: "", sectPr: "" };
       
       const bodyContent = bodyMatch[1];
-      // Extract sectPr if it exists
       const sectPrMatch = bodyContent.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
       
       if (sectPrMatch) {
-        // Return body without sectPr and the sectPr separately
         return {
           body: bodyContent.replace(sectPrMatch[0], ""),
           sectPr: sectPrMatch[0]
@@ -341,17 +303,13 @@ const mergeDocxContent = async (sourceFolder, targetFolder, mediaMapping, startI
       return { body: bodyContent, sectPr: "" };
     };
     
-    // Extract content parts
     const doc1Parts = extractBody(content1);
     const doc2Parts = extractBody(updatedContent2);
     
-    // Use sectPr from first document as it contains the page setup
     const sectPr = doc1Parts.sectPr || doc2Parts.sectPr;
     
-    // Merge the bodies and append the sectPr
     const mergedBody = doc1Parts.body + doc2Parts.body + sectPr;
     
-    // Create the merged content
     const mergedContent = content1.replace(
       /<w:body>[\s\S]*?<\/w:body>/,
       `<w:body>${mergedBody}</w:body>`
@@ -359,7 +317,6 @@ const mergeDocxContent = async (sourceFolder, targetFolder, mediaMapping, startI
 
     fs.writeFileSync(docXmlPath1, mergedContent, DOCX.ENCODING);
     
-    // Merge other necessary files
     mergeStylesAndSettings(sourceFolder, targetFolder);
   }
 };
