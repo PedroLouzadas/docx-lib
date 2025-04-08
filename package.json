@@ -13,6 +13,7 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
+    "docx-merger": "^1.2.2",
     "fs-extra": "^11.3.0",
     "mammoth": "^1.9.0",
     "pizzip": "^3.1.8",
